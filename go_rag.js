@@ -1,7 +1,7 @@
 import { ChromaClient, OpenAIEmbeddingFunction } from "chromadb";
 import { ChatOpenAI } from "@langchain/openai";
-import { program } from "commander";
 import * as dotenv from "dotenv";
+import readline from "readline";
 
 dotenv.config();
 
@@ -13,37 +13,25 @@ if (!OPENAI_API_KEY) {
 	process.exit(1);
 }
 
-// 📌 Configurar CLI con Commander
-program
-	.version("1.0.0")
-	.description(
-		"CLI para generar código en Golang y responder preguntas técnicas usando un sistema RAG mejorado con doble LLM",
-	)
-	.argument("<query>", "Consulta en lenguaje natural")
-	.action(async (query) => {
-		console.log(`🔎 Query original del usuario: "${query}"`);
+// Variable para almacenar el historial de la conversación durante la sesión
+let conversationHistory = [];
 
-		try {
-			// 1️⃣ LLM 1 Reformula la query
-			const refinedQuery = await reformulateQuery(query);
-			console.log(`📝 Query optimizada para búsqueda: "${refinedQuery}"`);
+// Función para añadir mensajes al historial
+function addToHistory(role, message) {
+	conversationHistory.push({ role, message });
+}
 
-			// 2️⃣ Búsqueda en ChromaDB con la query reformulada
-			const context = await fetchRelevantDocs(refinedQuery);
-			console.log("✅ Contexto encontrado en ChromaDB.");
+// Función para formatear el historial y usarlo en el prompt del LLM
+function formatHistory() {
+	return conversationHistory
+		.map(
+			(item) =>
+				`${item.role === "user" ? "Usuario" : "Asistente"}: ${item.message}`,
+		)
+		.join("\n");
+}
 
-			// 3️⃣ LLM 2 Responde la pregunta o genera código basado en el contexto
-			const response = await answerOrGenerateCode(query, context);
-			console.log("\n💻 Respuesta generada:\n");
-			console.log(response);
-		} catch (error) {
-			console.error("❌ Error:", error);
-		}
-	});
-
-program.parse(process.argv);
-
-// 📌 1️⃣ LLM 1: Reformula la query del usuario para optimizar la búsqueda
+// 📌 1️⃣ LLM 1: Reformula la query del usuario
 async function reformulateQuery(query) {
 	console.log("🤖 LLM 1 optimizando la consulta...");
 
@@ -63,7 +51,7 @@ Usuario: "${query}"
 Búsqueda optimizada:`;
 
 	const response = await llm.invoke(prompt);
-	return response.content; // Accede al contenido del mensaje
+	return response.content;
 }
 
 // 📌 2️⃣ Buscar información en ChromaDB con la query optimizada
@@ -81,12 +69,12 @@ async function fetchRelevantDocs(query) {
 		embeddingFunction: embeddingFunction,
 	});
 
-	// 🔥 Generar embedding de la query
+	// Generar embedding de la query
 	const queryEmbedding = await embeddingFunction.generate([query]);
 
-	// 🔎 Buscar información relevante en ChromaDB con embeddings
+	// Buscar información relevante en ChromaDB con embeddings
 	const results = await collection.query({
-		queryEmbeddings: queryEmbedding, // ✅ Usa embeddings explícitamente
+		queryEmbeddings: queryEmbedding,
 		nResults: 5,
 	});
 
@@ -96,7 +84,7 @@ async function fetchRelevantDocs(query) {
 	);
 }
 
-// 📌 3️⃣ LLM 2: Responde preguntas técnicas o genera código basado en el contexto
+// 📌 3️⃣ LLM 2: Responde preguntas técnicas o genera código basado en el contexto y el historial
 async function answerOrGenerateCode(query, context) {
 	console.log("🤖 LLM 2 procesando la consulta con el contexto recuperado...");
 
@@ -105,25 +93,27 @@ async function answerOrGenerateCode(query, context) {
 		openAIApiKey: OPENAI_API_KEY,
 	});
 
+	// Incluir el historial de la conversación en el prompt
+	const conversationContext = formatHistory();
+
 	const prompt = `Eres un experto en Golang con un profundo conocimiento del lenguaje y su ecosistema.
 Tienes acceso a documentación oficial de la librería estándar de Go y puedes utilizarla para responder preguntas técnicas con información precisa.
 
 **Reglas de respuesta:**
-- Dale prioridad al uso de la documentación proporcionada.
-- Si en la documentación proporcionada existe la funcionalidad de la pregunta, no dirás que no existe.
-- Si y solo si la documentación no cubre la pregunta, responde usando tu conocimiento general de Go.
-- Puedes usar tu base de conocimientos para complementar la respuesta.
-- Responde de manera clara y concisa.
-- Si la consulta requiere código, genera un ejemplo funcional y bien estructurado.
-- Si es necesario, explica el código generado brevemente, pero sin ser redundante.
-- No pidas al usuario que importe paquetes manualmente; inclúyelos en el código cuando sea necesario.
+- Prioriza el uso de la documentación proporcionada.
+- Si la documentación cubre la funcionalidad consultada, úsala; de lo contrario, complementa con tu conocimiento general de Go.
+- Responde de forma clara y concisa.
+- Si es necesario, genera ejemplos de código funcional y bien estructurado.
 
 ---
 
 📌 **DOCUMENTACIÓN DISPONIBLE**
-(Si la documentación es relevante, úsala en la respuesta)
-
 ${context}
+
+---
+
+📌 **Historial de la conversación:**
+${conversationContext}
 
 ---
 
@@ -133,5 +123,58 @@ ${query}
 📌 **Respuesta técnica o código en Go:**`;
 
 	const response = await llm.invoke(prompt);
-	return response.content; // Accede al contenido del mensaje
+	return response.content;
 }
+
+// Configuración del readline para el modo interactivo
+const rl = readline.createInterface({
+	input: process.stdin,
+	output: process.stdout,
+	prompt: "Consulta> ",
+});
+
+// Función para procesar cada consulta ingresada
+async function processQuery(query) {
+	// Guardar la consulta del usuario en el historial
+	addToHistory("user", query);
+
+	try {
+		// 1️⃣ Reformular la consulta
+		const refinedQuery = await reformulateQuery(query);
+		console.log(`📝 Query optimizada: "${refinedQuery}"`);
+
+		// 2️⃣ Buscar contexto en ChromaDB
+		const context = await fetchRelevantDocs(refinedQuery);
+		console.log("✅ Contexto recuperado desde ChromaDB.");
+
+		// 3️⃣ Responder o generar código basado en el contexto y el historial
+		const answer = await answerOrGenerateCode(query, context);
+		console.log("\n💻 Respuesta generada:\n");
+		console.log(answer);
+
+		// Guardar la respuesta del asistente en el historial
+		addToHistory("assistant", answer);
+	} catch (error) {
+		console.error("❌ Error al procesar la consulta:", error);
+	}
+}
+
+// Iniciar el modo interactivo
+console.log(
+	"Modo interactivo iniciado. Escribe 'salir' para terminar la sesión.\n",
+);
+rl.prompt();
+
+rl.on("line", async (line) => {
+	const input = line.trim();
+	if (input.toLowerCase() === "salir") {
+		rl.close();
+		return;
+	}
+
+	await processQuery(input);
+	rl.prompt();
+}).on("close", () => {
+	console.log("Sesión terminada. ¡Hasta pronto!");
+	process.exit(0);
+});
