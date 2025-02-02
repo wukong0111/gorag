@@ -1,5 +1,4 @@
-import { Chroma } from "@langchain/community/vectorstores/chroma";
-import { OpenAIEmbeddings } from "@langchain/openai";
+import { ChromaClient, OpenAIEmbeddingFunction } from "chromadb";
 import { ChatOpenAI } from "@langchain/openai";
 import { program } from "commander";
 import * as dotenv from "dotenv";
@@ -71,22 +70,31 @@ Búsqueda optimizada:`;
 async function fetchRelevantDocs(query) {
 	console.log("📄 Consultando ChromaDB...");
 
-	const embeddings = new OpenAIEmbeddings({
-		openAIApiKey: OPENAI_API_KEY,
-		modelName: "text-embedding-3-small",
+	const client = new ChromaClient({ host: CHROMA_DB_URL });
+	const embeddingFunction = new OpenAIEmbeddingFunction({
+		openai_api_key: OPENAI_API_KEY,
+		openai_model: "text-embedding-3-small",
 	});
 
-	const vectorStore = new Chroma(embeddings, {
-		collectionName: "golang_docs",
-		url: CHROMA_DB_URL,
-		collectionMetadata: {
-			"hnsw:space": "cosine",
-		},
+	const collection = await client.getCollection({
+		name: "golang_docs",
+		embeddingFunction: embeddingFunction,
 	});
 
-	// Buscar información relevante en ChromaDB
-	const results = await vectorStore.similaritySearch(query, 5);
-	return results.map((r) => r.pageContent).join("\n\n");
+	// 🔥 Generar embedding de la query
+	const queryEmbedding = await embeddingFunction.generate([query]);
+
+	// 🔎 Buscar información relevante en ChromaDB con embeddings
+	const results = await collection.query({
+		queryEmbeddings: queryEmbedding, // ✅ Usa embeddings explícitamente
+		nResults: 5,
+	});
+
+	console.log("🔍 Resultados obtenidos:", results);
+	return (
+		results.documents?.[0]?.join("\n\n") ??
+		"No se encontraron documentos relevantes."
+	);
 }
 
 // 📌 3️⃣ LLM 2: Responde preguntas técnicas o genera código basado en el contexto
@@ -102,8 +110,10 @@ async function answerOrGenerateCode(query, context) {
 Tienes acceso a documentación oficial de la librería estándar de Go y puedes utilizarla para responder preguntas técnicas con información precisa.
 
 **Reglas de respuesta:**
-- Usa la documentación proporcionada si es relevante.
-- Si la documentación no cubre la pregunta, responde usando tu conocimiento general de Go.
+- Dale prioridad al uso de la documentación proporcionada.
+- Si en la documentación proporcionada existe la funcionalidad de la pregunta, no dirás que no existe.
+- Si y solo si la documentación no cubre la pregunta, responde usando tu conocimiento general de Go.
+- Puedes usar tu base de conocimientos para complementar la respuesta.
 - Responde de manera clara y concisa.
 - Si la consulta requiere código, genera un ejemplo funcional y bien estructurado.
 - Si es necesario, explica el código generado brevemente, pero sin ser redundante.
