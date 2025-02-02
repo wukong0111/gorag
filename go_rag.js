@@ -90,7 +90,6 @@ async function fetchRelevantDocs(query) {
 		nResults: 5,
 	});
 
-	console.log("🔍 Resultados obtenidos:", results);
 	return (
 		results.documents?.[0]?.join("\n\n") ??
 		"No se encontraron documentos relevantes."
