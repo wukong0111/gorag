@@ -11,15 +11,11 @@
 	"license": "ISC",
 	"type": "module",
 	"dependencies": {
-		"@langchain/community": "^0.3.28",
-		"@langchain/core": "^0.3.37",
-		"@langchain/openai": "^0.4.2",
 		"chromadb": "^1.10.4",
 		"chromadb-default-embed": "^2.13.2",
 		"dotenv": "^16.4.7",
 		"fs-extra": "^11.3.0",
-		"langchain": "^0.3.15",
-		"openai": "^4.85.3",
+		"openai": "^4.85.4",
 		"p-limit": "^6.2.0",
 		"path": "^0.12.7"
 	},

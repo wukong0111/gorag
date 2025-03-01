@@ -10,10 +10,10 @@ const CHROMA_DB_PATH = process.env.CHROMA_DB_PATH || "./chroma_db";
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 const DOCS_DIR = process.env.DOCS_DIR || "./docs";
 const CHUNK_SIZE = process.env.CHUNK_SIZE
-	? parseInt(process.env.CHUNK_SIZE)
+	? Number.parseInt(process.env.CHUNK_SIZE)
 	: 2000; // Volvemos a 2000
 const CHUNK_OVERLAP = process.env.CHUNK_OVERLAP
-	? parseInt(process.env.CHUNK_OVERLAP)
+	? Number.parseInt(process.env.CHUNK_OVERLAP)
 	: 200;
 const CONCURRENCY = 4; // Procesar 4 archivos/chunks a la vez
 

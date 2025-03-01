@@ -1,7 +1,7 @@
 import { ChromaClient, OpenAIEmbeddingFunction } from "chromadb";
 import OpenAI from "openai";
 import * as dotenv from "dotenv";
-import readline from "readline";
+import readline from "node:readline";
 
 dotenv.config();
 
@@ -19,7 +19,7 @@ const openai = new OpenAI({
 });
 
 // Historial de la conversación
-let conversationHistory = [];
+const conversationHistory = [];
 
 // Función para añadir mensajes al historial
 function addToHistory(role, message) {
